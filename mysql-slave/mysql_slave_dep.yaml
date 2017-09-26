@@ -1,0 +1,166 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config-slave
+data:
+  my.cnf: |
+    [mysqld]
+    lower_case_table_names=1
+    character_set_server=utf8
+    max_connections=500
+    relay-log = subcenter-relay-bin
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque
+data:
+  root_password: cm9vdCFRQVo=
+
+---
+kind: DeploymentConfig
+apiVersion: v1
+metadata:
+  name: mysql-slave1
+spec:
+  selector:
+    name: mysql-slave1
+  template: 
+    metadata:
+      labels:
+        name: mysql-slave1
+      annotations:
+        scheduler.alpha.kubernetes.io/affinity: '{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"In","values":["zdztvurw02"]}]}]}}}'
+    spec:
+      containers:
+      - name: mysql-master
+        image: 10.0.52.188/tools/mysql-slave:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3306
+          protocol: TCP
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: root_password
+        - name: MYSQL_REPLICATION_USER
+          value: "repl"
+        - name: MYSQL_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: root_password
+        volumeMounts:
+        - name: mysql-home
+          mountPath: /var/lib/mysql
+        - name: mysql-config
+          mountPath: /etc/mysql/conf.d
+      volumes:
+         - name: mysql-home
+           hostPath:
+            path: /app/docker/activitii/mysql
+         - name: mysql-config
+           configMap:
+            name: mysql-config-slave
+  replicas: 1
+  triggers:
+  - type: ConfigChange 
+  strategy: 
+    type: Rolling
+  paused: false 
+  revisionHistoryLimit: 2
+  minReadySeconds: 0
+
+---
+kind: DeploymentConfig
+apiVersion: v1
+metadata:
+  name: mysql-slave2
+spec:
+  selector:
+    name: mysql-slave2
+  template: 
+    metadata:
+      labels:
+        name: mysql-slave2
+      annotations:
+        scheduler.alpha.kubernetes.io/affinity: '{"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"kubernetes.io/hostname","operator":"In","values":["zdztvurw03.crhd0a.crc.hk"]}]}]}}}'
+    spec:
+      containers:
+      - name: mysql-master
+        image: 10.0.52.188/tools/mysql-slave:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3306
+          protocol: TCP
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: root_password
+        - name: MYSQL_REPLICATION_USER
+          value: "repl"
+        - name: MYSQL_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: root_password
+        volumeMounts:
+        - name: mysql-home
+          mountPath: /var/lib/mysql
+        - name: mysql-config
+          mountPath: /etc/mysql/conf.d
+      volumes:
+         - name: mysql-home
+           hostPath:
+            path: /app/docker/activitii/mysql
+         - name: mysql-config
+           configMap:
+            name: mysql-config-slave
+  replicas: 1
+  triggers:
+  - type: ConfigChange 
+  strategy: 
+    type: Rolling
+  paused: false 
+  revisionHistoryLimit: 2
+  minReadySeconds: 0
+---
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    app: mysql-slave1
+  name: mysql-slave1
+spec:
+  ports:
+  - port: 8001
+    targetPort: 3306
+    protocol: TCP
+  externalIPs:
+  - 10.0.52.180
+  selector:
+    name: mysql-slave1
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    app: mysql-slave2
+  name: mysql-slave2
+spec:
+  ports:
+  - port: 8002
+    targetPort: 3306
+    protocol: TCP
+  externalIPs:
+  - 10.0.52.180
+  selector:
+    name: mysql-slave2
